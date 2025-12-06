@@ -706,3 +706,6 @@ class GestorEmbendings:
         estadisticas["respuestas_problema"] = respuestas_problema
         
         return estadisticas
+
+
+

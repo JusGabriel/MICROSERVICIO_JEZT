@@ -731,6 +731,7 @@ def ready_check():
     except Exception as e:
         logger.error(f"Error en ready check: {e}")
         return jsonify({'ready': False, 'error': str(e)}), 503
+@app.route('/api/status', methods=['GET'])
 def status_endpoint():
     """Endpoint de estado del sistema"""
     try:
@@ -773,6 +774,8 @@ if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
     logger.info(f"Iniciando servidor en puerto {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
+
+
 
 
 

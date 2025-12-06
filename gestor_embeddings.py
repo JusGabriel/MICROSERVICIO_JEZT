@@ -281,7 +281,9 @@ class GestorEmbendings:
             # Nuevo conteo/suma basado solo en votos de usuarios
             nuevo_total = total_actual + 1
             nueva_suma = suma_actual + float(calificacion)
-
+            
+            # Calcular nueva calificación promedio
+            nueva_calificacion_promedio = nueva_suma / nuevo_total if nuevo_total > 0 else 0
 
             # Solo marcar para corrección y ocultar si la calificación promedio baja a <=3
             requiere_correccion = False
@@ -706,6 +708,3 @@ class GestorEmbendings:
         estadisticas["respuestas_problema"] = respuestas_problema
         
         return estadisticas
-
-
-

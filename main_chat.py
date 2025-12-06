@@ -13,6 +13,8 @@ import json
 import logging
 import os
 import re
+import signal
+import sys
 import unicodedata
 from datetime import datetime
 from pathlib import Path
@@ -770,10 +772,19 @@ def status_endpoint():
 # MAIN
 # ============================================================================
 
+def handle_sigterm(signum, frame):
+    """Manejo graceful shutdown para Railway/Render"""
+    logger.info("🛑 Recibida señal de apagado graceful")
+    sys.exit(0)
+
+# Registrar handler para SIGTERM
+signal.signal(signal.SIGTERM, handle_sigterm)
+
 if __name__ == '__main__':
-    port = int(os.getenv("PORT", 5000))
-    logger.info(f"Iniciando servidor en puerto {port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    logger.info("✅ App Flask lista")
+    logger.info("🚀 En producción, usa: gunicorn wsgi:app")
+    app.run(host='0.0.0.0', debug=False, use_reloader=False)
+
 
 
 

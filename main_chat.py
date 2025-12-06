@@ -699,7 +699,38 @@ def procesar_respuesta_problema_endpoint():
             'message': str(e)
         }), 500
 
-@app.route('/api/status', methods=['GET'])
+# ============================================================================
+# ENDPOINTS - HEALTH & READY
+# ============================================================================
+
+@app.route('/', methods=['GET'])
+def root():
+    """Endpoint raíz para verificar que el app está vivo"""
+    return jsonify({'status': 'ok', 'service': 'Jezt Chat API'}), 200
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint para Render"""
+    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()}), 200
+
+@app.route('/ready', methods=['GET'])
+def ready_check():
+    """Ready check endpoint - verifica que los servicios estén listos"""
+    try:
+        # Verificar que gestor está disponible
+        if gestor is None:
+            return jsonify({'ready': False, 'error': 'GestorEmbendings no inicializado'}), 503
+        
+        # Intentar una operación simple
+        stats = gestor.obtener_estadisticas()
+        return jsonify({
+            'ready': True,
+            'gestor': 'ok',
+            'documentos': stats.get('total_documentos', 0)
+        }), 200
+    except Exception as e:
+        logger.error(f"Error en ready check: {e}")
+        return jsonify({'ready': False, 'error': str(e)}), 503
 def status_endpoint():
     """Endpoint de estado del sistema"""
     try:
@@ -734,24 +765,14 @@ def status_endpoint():
         logger.error(f"Error en status endpoint: {e}")
         return jsonify({'status': 'online', 'error': str(e)}), 200
 
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Health check endpoint para Render"""
-    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()}), 200
-
 # ============================================================================
 # MAIN
 # ============================================================================
 
 if __name__ == '__main__':
-    logger.info("main_chat ejecutado en modo local. En producción use gunicorn: gunicorn main_chat:app --bind 0.0.0.0:$PORT --workers 1")
-
-
-
-
-
-
-
+    port = int(os.getenv("PORT", 5000))
+    logger.info(f"Iniciando servidor en puerto {port}")
+    app.run(host='0.0.0.0', port=port, debug=False)
 
 
 

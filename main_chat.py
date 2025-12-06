@@ -707,8 +707,35 @@ def procesar_respuesta_problema_endpoint():
 
 @app.route('/', methods=['GET'])
 def root():
-    """Endpoint raíz para verificar que el app está vivo"""
-    return jsonify({'status': 'ok', 'service': 'Jezt Chat API'}), 200
+    """Endpoint raíz para verificar que el app está vivo - retorna HTML"""
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Jezt Chat API</title>
+        <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f0f0f0; }
+            .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
+            h1 { color: #333; }
+            .status { color: #27ae60; font-weight: bold; font-size: 18px; }
+            .info { color: #666; margin: 20px 0; }
+            code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>✅ Jezt Chat API</h1>
+            <p class="status">Status: ONLINE</p>
+            <div class="info">
+                <p><strong>Servicio:</strong> Chat con IA para ESFOT</p>
+                <p><strong>Health Check:</strong> <code>/health</code></p>
+                <p><strong>Ready Check:</strong> <code>/ready</code></p>
+                <p><strong>Status:</strong> <code>/api/status</code></p>
+            </div>
+        </div>
+    </body>
+    </html>
+    ''', 200, {'Content-Type': 'text/html'}
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -784,7 +811,6 @@ if __name__ == '__main__':
     logger.info("✅ App Flask lista")
     logger.info("🚀 En producción, usa: gunicorn wsgi:app")
     app.run(host='0.0.0.0', debug=False, use_reloader=False)
-
 
 
 

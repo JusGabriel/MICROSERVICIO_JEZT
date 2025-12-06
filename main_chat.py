@@ -437,7 +437,7 @@ def chat_endpoint():
                     
                     if resultado['success']:
                         data_res = resultado['data']
-                        yield f"data: {json.dumps({
+                        respuesta_json = json.dumps({
                             'etapa': 'completado',
                             'respuesta': data_res['respuesta'],
                             'confianza': data_res.get('confianza', 'media'),
@@ -446,7 +446,8 @@ def chat_endpoint():
                             'necesita_calificacion': data_res.get('solicitar_calificacion', True),
                             'puede_reportar': data_res.get('puede_reportar', True),
                             'calificacion_actual': data_res.get('calificacion_actual', 0)
-                        })}\n\n"
+                        })
+                        yield f"data: {respuesta_json}\n\n"
                     else:
                         yield f"data: {json.dumps({'etapa': 'error', 'mensaje': 'Error procesando'})}\n\n"
                     
@@ -733,6 +734,7 @@ def status_endpoint():
 
 if __name__ == '__main__':
     logger.info("main_chat ejecutado en modo local. En producción use gunicorn: gunicorn main_chat:app --bind 0.0.0.0:$PORT --workers 1")
+
 
 
 

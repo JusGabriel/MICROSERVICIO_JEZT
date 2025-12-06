@@ -178,19 +178,41 @@ logger.info(f"[CORS] FRONTEND_JSX_URL variable: '{raw_origins}'")
 
 if raw_origins == "*" or raw_origins == "":
     # Modo abierto (local o por defecto)
-    CORS(app, resources={r"/*": {"origins": "*"}})
+    CORS(app, resources={r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": False
+    }})
     logger.warning("CORS habilitado para TODOS los orígenes (*)")
 else:
     # Separar orígenes por coma
     allowed_origins = [o.strip() for o in raw_origins.split(",") if o.strip() != ""]
-    CORS(app, resources={r"/*": {"origins": allowed_origins}})
+    CORS(app, resources={r"/*": {
+        "origins": allowed_origins,
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+    }})
     logger.info(f"CORS cargado para orígenes: {allowed_origins}")
 
-# Log de cada request para ver el origen recibido
+# Handler adicional para preflight requests
 @app.before_request
-def log_request_origin():
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        response.headers.add("Access-Control-Allow-Origin", request.headers.get("Origin", "*"))
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+        response.headers.add("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS")
+        response.headers.add("Access-Control-Allow-Credentials", "true")
+        return response
+
+# Log de cada request para ver el origen recibido
+@app.after_request
+def log_request_origin(response):
     origin = request.headers.get('Origin')
-    logger.info(f"[CORS] Request Origin: {origin}")
+    logger.info(f"[CORS] Request Origin: {origin} | Status: {response.status_code}")
+    return response
 
 MODELO_QA = os.getenv("MODELO_QA", "mrm8488/bert-small-finetuned-squadv2")
 
@@ -811,6 +833,9 @@ if __name__ == '__main__':
     logger.info("✅ App Flask lista")
     logger.info("🚀 En producción, usa: gunicorn wsgi:app")
     app.run(host='0.0.0.0', debug=False, use_reloader=False)
+
+
+
 
 
 

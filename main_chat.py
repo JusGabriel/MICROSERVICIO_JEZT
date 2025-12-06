@@ -18,8 +18,13 @@ from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, request, jsonify, Response, stream_with_context
+from flask_cors import CORS
 import jwt
 from functools import wraps
+from rapidfuzz import fuzz, process
+from spellchecker import SpellChecker
+from transformers import pipeline
+
 JWT_SECRET = os.getenv("JWT_SECRET", "supersecret")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 
@@ -40,12 +45,9 @@ def token_required(f):
             return jsonify({'success': False, 'error': 'Token inválido'}), 401
         return f(*args, **kwargs)
     return decorated
-from flask_cors import CORS
-from rapidfuzz import fuzz, process
-from spellchecker import SpellChecker
-from transformers import pipeline
 
-# Endurecer  Chroma DB es  available locally (download from S3 if configured)
+
+# Descargar la base de Chroma de S3 antes de iniciar el servicio (si está disponible)
 try:
     from download_chroma import ensure_chroma_local
     try:
@@ -54,17 +56,6 @@ try:
         print('[WARN] Could not ensure local Chroma DB:', _ex)
 except Exception:
     # download_chroma may not be available or boto3 not installed; continue and let GestorEmbendings handle missing file
-    print('[INFO] download_chroma not available - skipping S3 download step')
-
-
-# Descarga la base de Chroma de S3 antes de iniciar el servicio
-try:
-    from download_chroma import ensure_chroma_local
-    try:
-        ensure_chroma_local()
-    except Exception as _ex:
-        print('[WARN] Could not ensure local Chroma DB:', _ex)
-except Exception:
     print('[INFO] download_chroma not available - skipping S3 download step')
 
 from gestor_embeddings import GestorEmbendings
@@ -199,17 +190,29 @@ def log_request_origin():
     origin = request.headers.get('Origin')
     logger.info(f"[CORS] Request Origin: {origin}")
 
-MODELO_QA = os.getenv("MODELO_QA")
+MODELO_QA = os.getenv("MODELO_QA", "mrm8488/bert-small-finetuned-squadv2")
 
 # Inicializar componentes pesados una sola vez
-gestor = GestorEmbendings()
-logger.info("Inicializando pipeline QA con modelo %s (puede tardar)", MODELO_QA)
-qa_pipeline = pipeline(
-    "question-answering",
-    model=MODELO_QA,
-    tokenizer=MODELO_QA
-)
-logger.info("Pipeline QA listo")
+try:
+    gestor = GestorEmbendings()
+    logger.info("GestorEmbendings inicializado correctamente")
+except Exception as e:
+    logger.error(f"Error inicializando GestorEmbendings: {e}")
+    raise
+
+# El pipeline QA es opcional - solo se inicializa si es necesario
+qa_pipeline = None
+try:
+    if MODELO_QA:
+        logger.info("Inicializando pipeline QA con modelo %s (puede tardar)", MODELO_QA)
+        qa_pipeline = pipeline(
+            "question-answering",
+            model=MODELO_QA,
+            tokenizer=MODELO_QA
+        )
+        logger.info("Pipeline QA listo")
+except Exception as e:
+    logger.warning(f"No se pudo inicializar pipeline QA: {e}. El chat funcionará sin IA generativa.")
 
 # ============================================================================
 # CHAT BACKEND CLASS
@@ -699,34 +702,42 @@ def procesar_respuesta_problema_endpoint():
 @app.route('/api/status', methods=['GET'])
 def status_endpoint():
     """Endpoint de estado del sistema"""
-    stats = gestor.obtener_estadisticas()
-    
-    return jsonify({
-        'status': 'online',
-        'modelo_qa': MODELO_QA,
-        'base_conocimiento': {
-            'total_documentos': stats['total_documentos'],
-            'tipos': stats.get('por_tipo', {}),
-            'categorias': stats.get('por_categoria', {})
-        },
-        'sistema_calificaciones': {
-            'total_respuestas_calificadas': stats.get('total_respuestas_calificadas', 0),
-            'calificacion_promedio': stats.get('calificacion_promedio', 0),
-            'respuestas_problema': stats.get('respuestas_problema', 0)
-        },
-        'roles': {
-            'estudiante': 'Usar chat, calificar (1-5), reportar problemas',
-            'administrador': 'Usar chat, calificar (1-5), reportar problemas', 
-            'pasante': 'Agregar preguntas (calificación 5), modificar respuestas <3'
-        },
-        'endpoints_pasante': {
-            'agregar_pregunta': 'POST /api/agregar-qa-pasante',
-            'ver_problemas': 'GET /api/pasante/respuestas-problema',
-            'actualizar_respuesta': 'POST /api/pasante/actualizar-respuesta',
-            'eliminar_respuesta': 'POST /api/pasante/eliminar-respuesta',
-            'procesar_automatico': 'POST /api/pasante/procesar-respuesta-problema'
-        }
-    })
+    try:
+        stats = gestor.obtener_estadisticas()
+        return jsonify({
+            'status': 'online',
+            'modelo_qa': MODELO_QA,
+            'base_conocimiento': {
+                'total_documentos': stats['total_documentos'],
+                'tipos': stats.get('por_tipo', {}),
+                'categorias': stats.get('por_categoria', {})
+            },
+            'sistema_calificaciones': {
+                'total_respuestas_calificadas': stats.get('total_respuestas_calificadas', 0),
+                'calificacion_promedio': stats.get('calificacion_promedio', 0),
+                'respuestas_problema': stats.get('respuestas_problema', 0)
+            },
+            'roles': {
+                'estudiante': 'Usar chat, calificar (1-5), reportar problemas',
+                'administrador': 'Usar chat, calificar (1-5), reportar problemas', 
+                'pasante': 'Agregar preguntas (calificación 5), modificar respuestas <3'
+            },
+            'endpoints_pasante': {
+                'agregar_pregunta': 'POST /api/agregar-qa-pasante',
+                'ver_problemas': 'GET /api/pasante/respuestas-problema',
+                'actualizar_respuesta': 'POST /api/pasante/actualizar-respuesta',
+                'eliminar_respuesta': 'POST /api/pasante/eliminar-respuesta',
+                'procesar_automatico': 'POST /api/pasante/procesar-respuesta-problema'
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error en status endpoint: {e}")
+        return jsonify({'status': 'online', 'error': str(e)}), 200
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint para Render"""
+    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()}), 200
 
 # ============================================================================
 # MAIN
@@ -734,6 +745,14 @@ def status_endpoint():
 
 if __name__ == '__main__':
     logger.info("main_chat ejecutado en modo local. En producción use gunicorn: gunicorn main_chat:app --bind 0.0.0.0:$PORT --workers 1")
+
+
+
+
+
+
+
+
 
 
 

@@ -39,7 +39,7 @@ def token_required(f):
             return jsonify({'success': False, 'error': 'Token JWT requerido'}), 401
         token = auth_header.split(' ')[1]
         try:
-            # 🔑 IMPORTANTE: Intenta decodificar con JWT_SECRET del entorno
+            #  IMPORTANTE: Intenta decodificar con JWT_SECRET del entorno
             # Si falla, acepta el token de todas formas (el Backend Node.js ya lo validó)
             try:
                 payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -317,8 +317,19 @@ class ChatBackend:
         except Exception as e:
             return False, [f"Error al guardar: {str(e)}"]
     
-    def procesar_pregunta_chat(self, pregunta_usuario, usuario_id=None, rol_usuario="estudiante"):
+    def procesar_pregunta_chat(self, pregunta_usuario, historial=None, usuario_id=None, rol_usuario="estudiante"):
         """Procesa preguntas del chat para estudiantes y administradores"""
+        # 🔑 USAR CONTEXTO DE CONVERSACIÓN PREVIA SI ESTÁ DISPONIBLE
+        if historial and isinstance(historial, list) and len(historial) > 0:
+            # Construir contexto desde preguntas previas
+            preguntas_previas = " ".join([h.get("contenido", "") for h in historial if h.get("rol") == "usuario"])
+            pregunta_mejorada = f"{preguntas_previas} {pregunta_usuario}".strip()
+            print(f"[CONTEXTO] Preguntas previas: '{preguntas_previas}'")
+            print(f"[CONTEXTO] Pregunta mejorada: '{pregunta_mejorada}'")
+        else:
+            pregunta_mejorada = pregunta_usuario
+            print(f"[CONTEXTO] Sin historial, pregunta original: '{pregunta_usuario}'")
+        
         # Normalizar pregunta para verificar universidades bloqueadas
         pregunta_norm_check = unicodedata.normalize('NFD', str(pregunta_usuario).upper())
         pregunta_norm_check = ''.join(c for c in pregunta_norm_check if unicodedata.category(c) != 'Mn')
@@ -336,9 +347,10 @@ class ChatBackend:
                     }
                 }
 
-        # Corregir ortografía
-        pregunta_corregida = corregir_ortografia(str(pregunta_usuario))
+        # Corregir ortografía de la pregunta mejorada (con contexto)
+        pregunta_corregida = corregir_ortografia(str(pregunta_mejorada))
         print(f"[DEBUG] Pregunta original: {pregunta_usuario}")
+        print(f"[DEBUG] Pregunta con contexto: {pregunta_mejorada}")
         print(f"[DEBUG] Pregunta corregida: {pregunta_corregida}")
         pregunta_norm = _normalizar_texto(pregunta_corregida)
         todas_preguntas = self.gestor.coleccion.get(where={"tipo": "pregunta_respuesta"}, include=["metadatas"])
@@ -379,7 +391,7 @@ class ChatBackend:
                 print(f"[MATCH] Fuzzy aceptado")
                 return {'success': True, 'data': respuesta_data}
 
-        # Búsqueda por embedding
+        # Búsqueda por embedding (usando pregunta mejorada con contexto)
         EMBEDDING_UMBRAL = 0.1
         mejor_respuesta = self.gestor.buscar_mejor_respuesta(pregunta_corregida, umbral_confianza=0.0)
         if mejor_respuesta:
@@ -406,7 +418,7 @@ class ChatBackend:
             }
             return {'success': True, 'data': respuesta_data}
 
-        # 🔴 DESACTIVADO: Generación de respuestas por IA
+        # DESACTIVADO: Generación de respuestas por IA
         # El bot es limitado y solo responde 3 palabras. Priorizar siempre búsqueda en BD.
         # Si no hay coincidencias, informar al usuario que contacte con soporte.
 
@@ -468,6 +480,7 @@ def chat_endpoint():
             }), 400
         
         pregunta = data['pregunta'].strip()
+        historial = data.get('historial', [])  #  RECIBIR HISTORIAL
         usuario_id = data.get('usuario_id')
         rol_usuario = data.get('rol', 'estudiante')
         streaming = data.get('streaming', False)
@@ -483,7 +496,7 @@ def chat_endpoint():
             def generate_stream():
                 try:
                     yield f"data: {json.dumps({'etapa': 'buscando', 'mensaje': 'Buscando información relevante...'})}\n\n"
-                    resultado = chat_backend.procesar_pregunta_chat(pregunta, usuario_id, rol_usuario)
+                    resultado = chat_backend.procesar_pregunta_chat(pregunta, historial, usuario_id, rol_usuario)
                     yield f"data: {json.dumps({'etapa': 'procesando', 'mensaje': 'Generando respuesta...'})}\n\n"
                     
                     if resultado['success']:
@@ -770,7 +783,7 @@ def root():
     </head>
     <body>
         <div class="container">
-            <h1>Jezt Chat API</h1>
+            <h1> Jezt Chat API</h1>
             <p class="status">Status: ONLINE</p>
             <div class="info">
                 <p><strong>Servicio:</strong> Chat con IA para ESFOT</p>
@@ -857,7 +870,6 @@ if __name__ == '__main__':
     logger.info(" App Flask lista")
     logger.info(" En producción, usa: gunicorn wsgi:app")
     app.run(host='0.0.0.0', debug=False, use_reloader=False)
-
 
 
 

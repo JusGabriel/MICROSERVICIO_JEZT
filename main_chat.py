@@ -336,9 +336,10 @@ class ChatBackend:
         pregunta_norm_check = unicodedata.normalize('NFD', str(pregunta_usuario).upper())
         pregunta_norm_check = ''.join(c for c in pregunta_norm_check if unicodedata.category(c) != 'Mn')
         
-        # Verificar si menciona universidades bloqueadas
+        # Verificar si menciona universidades bloqueadas (buscar como palabras completas o substrings)
         for uni_bloqueada in UNIVERSIDADES_BLOQUEADAS_NORMALIZADAS:
-            if uni_bloqueada in pregunta_norm_check:
+            # Buscar como palabra completa O como substring para siglas como "EPN"
+            if uni_bloqueada in pregunta_norm_check or any(word == uni_bloqueada for word in pregunta_norm_check.split()):
                 return {
                     'success': True,
                     'data': {
@@ -872,12 +873,6 @@ if __name__ == '__main__':
     logger.info(" App Flask lista")
     logger.info(" En producción, usa: gunicorn wsgi:app")
     app.run(host='0.0.0.0', debug=False, use_reloader=False)
-
-
-
-
-
-
 
 
 

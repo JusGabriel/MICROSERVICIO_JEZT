@@ -72,3 +72,4 @@ if __name__ == '__main__':
     print('Running download_chroma ensure...')
     p = ensure_chroma_local()
     print('Result:', p)
+

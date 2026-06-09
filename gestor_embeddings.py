@@ -135,7 +135,8 @@ class GestorEmbendings:
                         continue
                     
                     # Calcular score combinado
-                    similitud = 1 - distancia
+                    # Usar formula estable que siempre devuelve [0, 1]
+                    similitud = 1 / (1 + distancia)  # Más estable que 1 - distancia
                     calificacion_normalizada = metadata.get('calificacion', 3) / 5
                     es_verificada = metadata.get('verificada', False)
                     es_pasante = metadata.get('es_pasante', False)
@@ -708,3 +709,4 @@ class GestorEmbendings:
         estadisticas["respuestas_problema"] = respuestas_problema
         
         return estadisticas
+

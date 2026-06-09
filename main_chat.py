@@ -172,23 +172,59 @@ domain_word_list = list(custom_words)
 
 def corregir_ortografia(texto):
     """Corrige ortografía con spellchecker + fuzzy matching sobre dominio"""
+    # ✅ PROTECCIÓN MÁXIMA: No tocar palabras clave críticas
+    palabras_intocables = {
+        'esfot', 'escuela', 'politecnica', 'tecnologia', 'superior', 'procesamiento', 
+        'alimentos', 'tspa', 'practicas', 'practicantes', 'tutor', 'tutoria', 
+        'carrera', 'estudiante', 'docente', 'administrador', 'pasante', 'convalidacion',
+        'comision', 'coordinacion', 'departamento', 'decanato', 'rectorado',
+        'internacionales', 'nacionales', 'presenciales', 'virtuales', 'hibridas',
+        'evaluacion', 'calificacion', 'nota', 'promedio', 'creditos', 'horas'
+    }
+    
     palabras = texto.split()
     corregidas = []
+    
     for palabra in palabras:
         plower = palabra.lower()
+        
+        # ✅ REGLA 1: Proteger palabras muy cortas (<=2 caracteres)
+        if len(plower) <= 2:
+            corregidas.append(palabra)
+            continue
+            
+        # ✅ REGLA 2: Proteger palabras intocables
+        if plower in palabras_intocables:
+            corregidas.append(palabra)
+            continue
+            
+        # ✅ REGLA 3: Proteger palabras con números
+        if any(c.isdigit() for c in plower):
+            corregidas.append(palabra)
+            continue
+        
+        # Si llegó aquí, intentar corrección
         if plower not in spell:
             sugerida = spell.correction(palabra)
+            
+            # Verificar si la sugerencia es válida
             if not sugerida or sugerida == palabra:
-                # Fuzzy matching sobre palabras del dominio
+                # Usar fuzzy matching como fallback
                 mejor, score, _ = process.extractOne(plower, domain_word_list, scorer=fuzz.ratio)
                 if score >= 70:
                     corregidas.append(mejor)
                 else:
                     corregidas.append(palabra)
-            else:
+            elif plower.startswith(sugerida[0:2]):  # Debe compartir primeras letras
+                # Aceptar sugerencia solo si comparte primeras letras
                 corregidas.append(sugerida)
+            else:
+                # Rechazar sugerencia muy diferente
+                corregidas.append(palabra)
         else:
+            # Palabra válida en el spell checker
             corregidas.append(palabra)
+    
     return ' '.join(corregidas)
 
 # ============================================================================
@@ -323,9 +359,16 @@ class ChatBackend:
         """Procesa preguntas del chat para estudiantes y administradores"""
         # 🔑 USAR CONTEXTO DE CONVERSACIÓN PREVIA SI ESTÁ DISPONIBLE
         if historial and isinstance(historial, list) and len(historial) > 0:
-            # Construir contexto desde preguntas previas
-            preguntas_previas = " ".join([h.get("contenido", "") for h in historial if h.get("rol") == "usuario"])
-            pregunta_mejorada = f"{preguntas_previas} {pregunta_usuario}".strip()
+            # Construir contexto desde preguntas previas (EXCLUIR la pregunta actual)
+            # Solo incluir preguntas anteriores, no la última (que es la actual)
+            preguntas_anteriores = [h.get("contenido", "") for h in historial[:-1] if h.get("rol") == "usuario"]
+            preguntas_previas = " ".join(preguntas_anteriores).strip() if preguntas_anteriores else ""
+            
+            if preguntas_previas:
+                pregunta_mejorada = f"{preguntas_previas} {pregunta_usuario}".strip()
+            else:
+                pregunta_mejorada = pregunta_usuario
+            
             print(f"[CONTEXTO] Preguntas previas: '{preguntas_previas}'")
             print(f"[CONTEXTO] Pregunta mejorada: '{pregunta_mejorada}'")
         else:
@@ -873,6 +916,8 @@ if __name__ == '__main__':
     logger.info(" App Flask lista")
     logger.info(" En producción, usa: gunicorn wsgi:app")
     app.run(host='0.0.0.0', debug=False, use_reloader=False)
+
+
 
 
 
